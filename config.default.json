@@ -1,0 +1,108 @@
+{
+  "port": 4747,
+  "upstream_host": "api.anthropic.com",
+  "upstream_scheme": "https",
+  "sentinel": "auto",
+  "models": {
+    "low": "claude-haiku-4-5",
+    "mid": "claude-sonnet-4-6",
+    "high": "claude-opus-4-6"
+  },
+  "rules": {
+    "thinking_forces_high": "enabled_only",
+    "plan_mode_high": true,
+    "route_subagents": true,
+    "retry_downgrade": true,
+    "long_context_tokens": 120000
+  },
+  "cutoffs": { "low": -3, "high": 4 },
+  "band": 1,
+  "weights": {
+    "low_verb": -3,
+    "len_short": -2,
+    "len_medium": -1,
+    "question": -1,
+    "high_term": 2,
+    "high_term_cap": 6,
+    "traceback": 2,
+    "multistep": 2,
+    "scope": 3,
+    "long_prompt": 1,
+    "very_long_prompt": 2,
+    "code_fence": 1,
+    "file_path": 1
+  },
+  "thresholds": {
+    "len_short_words": 5,
+    "len_medium_words": 12,
+    "long_words": 80,
+    "very_long_words": 150
+  },
+  "keywords": {
+    "low_verbs_start": [
+      "rename", "move", "copy", "delete", "remove", "list", "show", "print",
+      "display", "format", "lint", "sort", "bump", "undo", "revert",
+      "summarize", "summarise", "explain", "describe", "translate", "define",
+      "find", "search", "run", "install", "uninstall", "restart", "start",
+      "stop", "open", "cat"
+    ],
+    "low_phrases": [
+      "what is", "what's", "what are", "what does", "what do", "who is",
+      "when is", "when was", "where is", "where are", "how do i", "how to",
+      "how does", "how can i", "add a comment", "add comments", "fix typo",
+      "fix the typo", "fix a typo", "tl;dr", "tldr", "difference between",
+      "bump the version"
+    ],
+    "high_terms": {
+      "architecture": ["archit", "design", "redesign", "blueprint", "trade-off", "tradeoff", "\\bplan\\b"],
+      "debugging": [
+        "debug", "diagnose", "investigate", "root cause", "why is", "why does",
+        "why do", "why isn't", "why won't", "why can't", "deadlock",
+        "race condition", "memory leak", "memory usage", "intermittent",
+        "flaky", "crash", "segfault", "core dump", "find and fix",
+        "keeps failing", "fails randomly", "not working"
+      ],
+      "perf_security": [
+        "optimiz", "optimis", "performance", "too slow", "very slow",
+        "latency", "throughput", "under load", "scalab", "security",
+        "vulnerab", "exploit", "encrypt", "injection", "\\bxss\\b",
+        "\\bcsrf\\b", "\\baudit\\b", "penetration"
+      ],
+      "build": [
+        "implement", "migrate", "migration", "refactor", "rewrite", "overhaul",
+        "integrate", "integration", "end-to-end", "end to end", "from scratch",
+        "prototype", "build a", "build an", "build the", "build me",
+        "create a", "create an", "\\bdevelop\\b"
+      ],
+      "scale": [
+        "\\bsystem\\b", "\\bservice\\b", "\\bpipeline\\b", "\\bframework\\b",
+        "\\binfrastructure\\b", "\\bengine\\b", "\\bdaemon\\b", "\\bscheduler\\b"
+      ]
+    },
+    "scope_phrases": [
+      "across the codebase", "across the repo", "across the project",
+      "all files", "every file", "entire codebase", "entire repo",
+      "entire project", "whole codebase", "whole repo", "whole project",
+      "codebase-wide", "repo-wide", "project-wide", "multiple files",
+      "many files"
+    ],
+    "continuations": [
+      "yes", "y", "yep", "yeah", "yup", "ok", "okay", "k", "kk", "sure",
+      "go", "go ahead", "go for it", "continue", "keep going", "carry on",
+      "do it", "do that", "please do", "yes please", "proceed", "sounds good",
+      "looks good", "lgtm", "perfect", "great", "nice", "cool", "thanks",
+      "thank you", "ty", "next", "and then", "more", "again", "try again",
+      "retry", "resume", "approved", "ship it", "merge it", "that works",
+      "option 1", "option 2", "option 3", "1", "2", "3", "a", "b"
+    ]
+  },
+  "classifier": {
+    "api_key": null,
+    "model": "claude-haiku-4-5",
+    "timeout_s": 2.5
+  },
+  "log": {
+    "redact": true,
+    "prompt_head_chars": 80
+  }
+}
