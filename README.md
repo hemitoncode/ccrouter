@@ -1,7 +1,5 @@
 # 🔀 CC-Model-Router (CCMR)
 
-> A native Claude Code model router for Anthropic models.
-
 **cc-model-router** seamlessly integrates with Claude Code to automatically route your prompts to the optimal Anthropic model. Whether you need the lightning speed of Haiku for quick edits, the balanced power of Sonnet for standard development, or the deep reasoning of Opus for complex architecture, this router puts the right model at your fingertips.
 
 ---
