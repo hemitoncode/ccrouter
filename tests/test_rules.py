@@ -117,6 +117,70 @@ class TestPresetRules(unittest.TestCase):
         self.assertEqual(decision.tier, "high")
 
 
+class TestParamFixups(unittest.TestCase):
+    def test_haiku_strips_effort_and_thinking(self):
+        b = {"model": "claude-haiku-4-5",
+             "output_config": {"effort": "xhigh"},
+             "thinking": {"type": "adaptive"}}
+        fixups = router.apply_param_fixups(b, "claude-haiku-4-5", cfg())
+        self.assertNotIn("output_config", b)
+        self.assertNotIn("thinking", b)
+        self.assertIn("effort:xhigh->dropped", fixups)
+        self.assertIn("thinking:dropped", fixups)
+
+    def test_opus_46_caps_xhigh_to_high(self):
+        b = {"model": "claude-opus-4-6",
+             "output_config": {"effort": "xhigh"},
+             "thinking": {"type": "adaptive"}}
+        fixups = router.apply_param_fixups(b, "claude-opus-4-6", cfg())
+        self.assertEqual(b["output_config"]["effort"], "high")
+        self.assertEqual(b["thinking"], {"type": "adaptive"})
+        self.assertIn("effort:xhigh->high", fixups)
+
+    def test_supported_effort_untouched(self):
+        b = {"model": "claude-sonnet-4-6", "output_config": {"effort": "low"}}
+        fixups = router.apply_param_fixups(b, "claude-sonnet-4-6", cfg())
+        self.assertEqual(b["output_config"]["effort"], "low")
+        self.assertEqual(fixups, [])
+
+    def test_opus_48_keeps_xhigh(self):
+        b = {"model": "claude-opus-4-8", "output_config": {"effort": "xhigh"}}
+        fixups = router.apply_param_fixups(b, "claude-opus-4-8", cfg())
+        self.assertEqual(b["output_config"]["effort"], "xhigh")
+        self.assertEqual(fixups, [])
+
+    def test_unknown_model_untouched(self):
+        b = {"model": "claude-future-9", "output_config": {"effort": "xhigh"}}
+        fixups = router.apply_param_fixups(b, "claude-future-9", cfg())
+        self.assertEqual(b["output_config"]["effort"], "xhigh")
+        self.assertEqual(fixups, [])
+
+    def test_thinking_strip_cascades_to_clear_thinking_edit(self):
+        b = {"model": "claude-haiku-4-5",
+             "thinking": {"type": "adaptive"},
+             "context_management": {"edits": [
+                 {"type": "clear_thinking_20251015"},
+                 {"type": "clear_tool_uses_20250919"},
+             ]}}
+        fixups = router.apply_param_fixups(b, "claude-haiku-4-5", cfg())
+        self.assertIn("clear_thinking_edit:dropped", fixups)
+        self.assertEqual(b["context_management"]["edits"],
+                         [{"type": "clear_tool_uses_20250919"}])
+
+    def test_thinking_strip_drops_empty_context_management(self):
+        b = {"model": "claude-haiku-4-5",
+             "thinking": {"type": "adaptive"},
+             "context_management": {"edits": [{"type": "clear_thinking_20251015"}]}}
+        router.apply_param_fixups(b, "claude-haiku-4-5", cfg())
+        self.assertNotIn("context_management", b)
+
+    def test_other_output_config_keys_survive(self):
+        b = {"model": "claude-haiku-4-5",
+             "output_config": {"effort": "xhigh", "format": {"type": "json_schema"}}}
+        router.apply_param_fixups(b, "claude-haiku-4-5", cfg())
+        self.assertEqual(b["output_config"], {"format": {"type": "json_schema"}})
+
+
 class TestRobustness(unittest.TestCase):
     def test_messages_none(self):
         decision = decide({"model": "auto", "messages": None})

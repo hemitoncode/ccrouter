@@ -87,3 +87,57 @@ def _decide_tier(headers: dict, body: dict, raw_body_len: int,
 
     return Decision(tier, models[tier], rule, score=score, signals=signals,
                     hops=hops, picked_text=text)
+
+
+def apply_param_fixups(body: dict, model: str, cfg: dict) -> list:
+    """Adapt request params to the routed model's capabilities.
+
+    Claude Code shapes params (effort level, thinking) for the model the
+    *user* selected — behind the router that's the sentinel, so the session
+    settings pass through unchecked. Fix what the target model would 400 on:
+    unsupported effort levels are capped/stripped, thinking is stripped for
+    models without it. Unknown models are left untouched.
+    """
+    fixups = []
+    try:
+        params = cfg.get("model_params", {}).get(model)
+        if not params:
+            return fixups
+
+        output_config = body.get("output_config")
+        if isinstance(output_config, dict) and "effort" in output_config:
+            effort = output_config["effort"]
+            allowed = params.get("allowed_efforts", [])
+            if effort not in allowed:
+                if allowed and params.get("effort_fallback"):
+                    output_config["effort"] = params["effort_fallback"]
+                    fixups.append("effort:%s->%s" % (effort, output_config["effort"]))
+                else:
+                    output_config.pop("effort")
+                    fixups.append("effort:%s->dropped" % effort)
+                if not output_config:
+                    body.pop("output_config")
+
+        if not params.get("allow_thinking", True) and "thinking" in body:
+            body.pop("thinking")
+            fixups.append("thinking:dropped")
+            # Cascade: context-management strategies that require thinking
+            # (clear_thinking_*) 400 once thinking is gone.
+            context_management = body.get("context_management")
+            if isinstance(context_management, dict) and isinstance(
+                context_management.get("edits"), list
+            ):
+                kept = [
+                    edit for edit in context_management["edits"]
+                    if not (isinstance(edit, dict)
+                            and str(edit.get("type", "")).startswith("clear_thinking"))
+                ]
+                if len(kept) != len(context_management["edits"]):
+                    fixups.append("clear_thinking_edit:dropped")
+                    if kept:
+                        context_management["edits"] = kept
+                    else:
+                        body.pop("context_management")
+    except Exception:
+        return fixups
+    return fixups

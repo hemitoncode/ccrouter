@@ -32,6 +32,16 @@ class MockUpstream(BaseHTTPRequestHandler):
             "body": body,
         })
         mode = state.get("mode", "json")
+        if mode == "400_effort":
+            error = json.dumps({
+                "type": "error",
+                "error": {"type": "invalid_request_error",
+                          "message": "This model does not support effort level "
+                                     "'xhigh'. Supported levels: high, low, max, "
+                                     "medium."},
+            }).encode()
+            self._reply(400, error)
+            return
         if mode == "404_then_ok" and len(state["requests"]) == 1:
             error = json.dumps({
                 "type": "error",
@@ -211,6 +221,25 @@ class ProxyTest(unittest.TestCase):
                          self.cfg["models"]["high"])
         self.assertEqual(json.loads(requests[1]["body"])["model"],
                          self.cfg["models"]["mid"])
+
+    def test_effort_fixup_applied_for_routed_model(self):
+        body = self.sentinel_body(LOW_PROMPT)
+        body["output_config"] = {"effort": "xhigh"}
+        body["thinking"] = {"type": "adaptive"}
+        status, _ = self.request(body=body)
+        self.assertEqual(status, 200)
+        [req] = self.upstream_requests()
+        sent = json.loads(req["body"])
+        self.assertEqual(sent["model"], self.cfg["models"]["low"])
+        self.assertNotIn("output_config", sent)
+        self.assertNotIn("thinking", sent)
+
+    def test_param_400_is_not_retried(self):
+        self.mock.state["mode"] = "400_effort"
+        status, data = self.request(body=self.sentinel_body(HIGH_PROMPT))
+        self.assertEqual(status, 400)
+        self.assertIn(b"does not support effort", data)
+        self.assertEqual(len(self.upstream_requests()), 1)
 
     def test_unrouted_404_is_not_retried(self):
         self.mock.state["mode"] = "404_then_ok"

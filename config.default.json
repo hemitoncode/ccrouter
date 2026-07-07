@@ -8,6 +8,13 @@
     "mid": "claude-sonnet-4-6",
     "high": "claude-opus-4-6"
   },
+  "model_params": {
+    "claude-haiku-4-5": { "allowed_efforts": [], "allow_thinking": false },
+    "claude-sonnet-4-6": { "allowed_efforts": ["low", "medium", "high", "max"], "effort_fallback": "high", "allow_thinking": true },
+    "claude-opus-4-6": { "allowed_efforts": ["low", "medium", "high", "max"], "effort_fallback": "high", "allow_thinking": true },
+    "claude-opus-4-7": { "allowed_efforts": ["low", "medium", "high", "xhigh", "max"], "allow_thinking": true },
+    "claude-opus-4-8": { "allowed_efforts": ["low", "medium", "high", "xhigh", "max"], "allow_thinking": true }
+  },
   "rules": {
     "thinking_forces_high": "enabled_only",
     "plan_mode_high": true,

@@ -23,8 +23,21 @@ HOP_BY_HOP = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
     "te", "trailer", "transfer-encoding", "upgrade",
 }
-REQUEST_EXCLUDE = HOP_BY_HOP | {"host", "content-length"}
+REQUEST_EXCLUDE = HOP_BY_HOP | {"host", "content-length", "expect"}
 RESPONSE_EXCLUDE = HOP_BY_HOP | {"content-length"}
+
+
+def _model_unavailable(err: bytes) -> bool:
+    """True only for 'this model isn't served to you' errors — never for
+    unrelated 400s (e.g. unsupported params), which must surface as-is."""
+    lower = err.lower()
+    if b"not_found_error" in lower:
+        return True
+    return b"model" in lower and any(
+        phrase in lower
+        for phrase in (b"not found", b"does not exist", b"not available",
+                       b"no access", b"permission", b"not a recognized")
+    )
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
@@ -94,6 +107,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
             )
         if decision is not None:
             body_dict["model"] = decision.model
+            fixups = router.apply_param_fixups(body_dict, decision.model, cfg)
+            decision.signals.extend("fixup:" + f for f in fixups)
             raw_body = json.dumps(
                 body_dict, ensure_ascii=False, separators=(",", ":")
             ).encode("utf-8")
@@ -114,14 +129,17 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 err = resp.read()
                 conn.close()
                 conn = None
-                if b"model" in err.lower():
+                if _model_unavailable(err):
                     body_dict["model"] = cfg["models"]["mid"]
+                    fixups = router.apply_param_fixups(
+                        body_dict, cfg["models"]["mid"], cfg)
                     raw_body = json.dumps(
                         body_dict, ensure_ascii=False, separators=(",", ":")
                     ).encode("utf-8")
                     retry = router.Decision(
                         "mid", cfg["models"]["mid"], "downgrade_retry",
-                        signals=["from:%s" % decision.model],
+                        signals=["from:%s" % decision.model]
+                        + ["fixup:" + f for f in fixups],
                     )
                     decisions.record(retry, dict(self.headers), self.path, cfg)
                     conn = self._upstream_request(raw_body)
