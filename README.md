@@ -1,7 +1,7 @@
-# cc-model-router
+# ccrouter
 
 Per-prompt model routing for Claude Code. A tiny localhost reverse proxy
-(Python 3 stdlib, zero dependencies) sits between Claude Code and
+(Node.js, **zero dependencies**) sits between Claude Code and
 `api.anthropic.com`, classifies each prompt with preset rules plus a
 lightweight heuristic classifier, and rewrites the request's `model` field:
 
@@ -17,42 +17,50 @@ own Haiku utility calls) passes through byte-identical. Headers — including
 your subscription's OAuth `Authorization` and `anthropic-beta` — are
 forwarded verbatim and never logged.
 
-## Quick start
+## Install
+
+Requires Node.js ≥ 18 and the `claude` CLI on your PATH.
 
 ```sh
-# from this repo
-bin/ccrouter code            # ← use this instead of `claude`
+npm install -g ccrouter
 ```
 
-`ccrouter code` starts the proxy if needed, then launches Claude Code with
-`ANTHROPIC_BASE_URL=http://127.0.0.1:4747` and `--model auto`. All other
-arguments pass straight through (`bin/ccrouter code -p "hi"`,
-`bin/ccrouter code --continue`, …).
-
-Optional alias:
+That puts a global `ccrouter` command on your PATH. Then, instead of
+`claude`, run:
 
 ```sh
-alias ccc='~/orca/projects/cc-model-router/bin/ccrouter code'
+ccrouter code            # a normal Claude Code session, auto-routed per prompt
 ```
 
-Nothing global is modified — plain `claude` keeps working exactly as
-before. Uninstalling is `bin/ccrouter stop` plus not using the wrapper.
+`ccrouter code` starts the proxy if it isn't already running, then launches
+Claude Code with `ANTHROPIC_BASE_URL=http://127.0.0.1:4747` and
+`--model auto`. All other arguments pass straight through
+(`ccrouter code -p "hi"`, `ccrouter code --continue`, …). Nothing global in
+Claude Code is modified — plain `claude` keeps working exactly as before,
+and `ccrouter stop` shuts the proxy down.
+
+### Install from source (or before publishing)
+
+```sh
+git clone https://github.com/hemitpatel/ccrouter && cd ccrouter
+npm link                 # registers the global `ccrouter` command from your checkout
+```
 
 ## Watching it work
 
 ```sh
-bin/ccrouter tail                          # live decision feed
-bin/ccrouter test "why does this deadlock?"  # offline dry-run of any prompt
-bin/ccrouter status                        # proxy state + recent decisions
-bin/ccrouter doctor                        # environment / health checks
+ccrouter tail                          # live decision feed
+ccrouter test "why does this deadlock?"  # offline dry-run of any prompt
+ccrouter status                        # proxy state + recent decisions
+ccrouter doctor                        # environment / health checks
 ```
 
 `tail` output, one line per routed request:
 
 ```
-19:42:07  LOW  claude-haiku-4-5   -5  heuristic  [low_verb:what is, short, question]
-19:43:11  HIGH claude-opus-4-6    +4  heuristic  [debugging:deadlock, debugging:why does]
-19:44:02  HIGH claude-opus-4-6    +4  continuation  [debugging:deadlock, ...]
+19:42:07  LOW  claude-haiku-4-5    -5  heuristic  [low_verb:what is, short, question]
+19:43:11  HIGH claude-opus-4-6     +6  heuristic  [debugging:why does, debugging:deadlock]
+19:44:02  HIGH claude-opus-4-6     +6  continuation  [debugging:deadlock, ...]
 ```
 
 ## How routing decides
@@ -78,23 +86,27 @@ bin/ccrouter doctor                        # environment / health checks
    plus its dependent `context_management` edits are stripped for Haiku.
    Every fixup is visible in the decision log.
 6. **Fail-open:** any routing error → MID. If the upstream reports the
-   routed model isn't available (not-found/no-access), the request is
-   retried once at MID; unrelated errors surface untouched.
+   routed model isn't available, the request is retried once at MID;
+   unrelated errors surface untouched.
+
+## Configuration
 
 Every knob — models, sentinel, port, keyword lists, weights, cutoffs — is
-config. Copy any subset of `config.default.json` into
-`~/.cc-model-router/config.json`; it deep-merges over the defaults.
-Restart the proxy (`bin/ccrouter stop && bin/ccrouter start`) to apply.
+config. Copy any subset of the bundled `config.default.json` into
+`~/.cc-model-router/config.json`; it deep-merges over the defaults. A broken
+or mistyped config is ignored (defaults are used) and flagged by
+`ccrouter doctor`. Restart the proxy to apply
+(`ccrouter stop && ccrouter start`).
 
 ```jsonc
-// ~/.cc-model-router/config.json — example override
+// ~/.cc-model-router/config.json — example: use Opus 4.8 for the HIGH tier
 { "models": { "high": "claude-opus-4-8" } }
 ```
 
 ### Optional LLM tie-break
 
 For prompts whose score lands near a cutoff, the router can ask Haiku for a
-second opinion (~300ms, ~$0.0001). This requires an **API key** in
+second opinion (~300ms). This requires an **API key** in
 `~/.cc-model-router/config.json` under `classifier.api_key` — the proxy
 never reuses your subscription's OAuth token for calls it makes itself.
 Without a key (the default) routing is pure heuristics with zero added
@@ -114,9 +126,18 @@ latency.
 ## Development
 
 ```sh
-python3 -m unittest discover tests   # unit tests (incl. proxy vs mock upstream)
-python3 eval/run.py                  # classifier accuracy gate (≥90%)
+npm test                 # unit tests (node:test — incl. proxy vs mock upstream)
+npm run eval             # classifier accuracy gate (≥90%)
 ```
 
 State lives in `~/.cc-model-router/` (`config.json`, `decisions.jsonl`,
 `server.log`, `server.pid`). `CCROUTER_HOME` overrides it (tests do this).
+
+## Publishing to npm
+
+```sh
+npm pack --dry-run       # inspect exactly what will be published
+npm publish              # (npm login first; if the name "ccrouter" is taken,
+                         #  set a scoped name like "@yourname/ccrouter" in
+                         #  package.json — the command stays `ccrouter`)
+```

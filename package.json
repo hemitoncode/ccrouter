@@ -1,0 +1,39 @@
+{
+  "name": "ccrouter",
+  "version": "0.1.0",
+  "description": "Per-prompt model router for Claude Code — a zero-dependency localhost proxy that classifies each prompt and routes it to the best-suited Claude model (Haiku/Sonnet/Opus).",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "model-router",
+    "llm",
+    "proxy",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "Hemit Patel",
+  "bin": {
+    "ccrouter": "bin/ccrouter.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "config.default.json",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "eval": "node eval/run.js",
+    "start": "node src/server.js",
+    "ccrouter": "node bin/ccrouter.js"
+  },
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hemitpatel/ccrouter.git"
+  }
+}
