@@ -92,7 +92,8 @@ def ensure_running(cfg: dict) -> dict:
 
     config.state_dir().mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(SRC_DIR) + os.pathsep + env.get("PYTHONPATH", "")
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(SRC_DIR) + (os.pathsep + existing if existing else "")
     with open(server_log_path(), "ab") as log:
         subprocess.Popen(
             [sys.executable, "-m", "ccrouter.server"],
@@ -100,6 +101,10 @@ def ensure_running(cfg: dict) -> dict:
             stderr=log,
             stdin=subprocess.DEVNULL,
             env=env,
+            # Never inherit the caller's cwd: `python -m` puts cwd on
+            # sys.path, and an untrusted directory could shadow stdlib
+            # modules inside the credential-carrying proxy process.
+            cwd=str(config.state_dir()),
             start_new_session=True,
         )
     for _ in range(30):
@@ -120,13 +125,31 @@ def cmd_start(cfg: dict) -> int:
     return 0
 
 
+def _is_ccrouter_process(pid: int) -> bool:
+    try:
+        out = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+        return "ccrouter.server" in out
+    except Exception:
+        return False
+
+
 def cmd_stop(cfg: dict) -> int:
-    pid = _read_pid()
     info = health(cfg["port"])
-    if info and not pid:
-        pid = info.get("pid")
+    pid = info.get("pid") if info else _read_pid()
     if not pid or not _pid_alive(pid):
         print("proxy not running")
+        return 0
+    if not info and not _is_ccrouter_process(pid):
+        # Stale pidfile whose pid was recycled by an unrelated process —
+        # never signal it.
+        try:
+            pid_path().unlink()
+        except OSError:
+            pass
+        print("proxy not running (removed stale pidfile)")
         return 0
     os.kill(pid, signal.SIGTERM)
     for _ in range(30):

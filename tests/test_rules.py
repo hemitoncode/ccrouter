@@ -181,6 +181,34 @@ class TestParamFixups(unittest.TestCase):
         self.assertEqual(b["output_config"], {"format": {"type": "json_schema"}})
 
 
+class TestConfigRobustness(unittest.TestCase):
+    def _load(self, content):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write(content)
+            path = Path(f.name)
+        try:
+            return config.load_config(user_path=path)
+        finally:
+            path.unlink()
+
+    def test_non_object_user_config_falls_back_to_defaults(self):
+        c = self._load("[]")
+        self.assertIn("_user_config_error", c)
+        self.assertEqual(c["models"]["mid"], "claude-sonnet-4-6")
+
+    def test_wrong_typed_models_falls_back_to_defaults(self):
+        c = self._load('{"models": "opus"}')
+        self.assertIn("_user_config_error", c)
+        self.assertIsInstance(c["models"], dict)
+
+    def test_valid_override_merges(self):
+        c = self._load('{"models": {"high": "claude-opus-4-8"}}')
+        self.assertNotIn("_user_config_error", c)
+        self.assertEqual(c["models"]["high"], "claude-opus-4-8")
+        self.assertEqual(c["models"]["low"], "claude-haiku-4-5")
+
+
 class TestRobustness(unittest.TestCase):
     def test_messages_none(self):
         decision = decide({"model": "auto", "messages": None})

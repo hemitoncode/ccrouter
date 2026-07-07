@@ -261,9 +261,12 @@ def llm_tiebreak(text: str, cfg: dict) -> "str | None":
     ).encode("utf-8")
     conn = None
     try:
-        conn = http.client.HTTPSConnection(
-            cfg["upstream_host"], timeout=ccfg.get("timeout_s", 2.5)
+        conn_cls = (
+            http.client.HTTPSConnection
+            if cfg.get("upstream_scheme", "https") == "https"
+            else http.client.HTTPConnection
         )
+        conn = conn_cls(cfg["upstream_host"], timeout=ccfg.get("timeout_s", 2.5))
         conn.request(
             "POST",
             "/v1/messages",

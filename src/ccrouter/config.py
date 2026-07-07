@@ -34,19 +34,47 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
+def _validate(cfg: dict) -> "str | None":
+    """Minimal shape check for the keys the server dereferences at runtime."""
+    models = cfg.get("models")
+    if not isinstance(models, dict) or not all(
+        isinstance(models.get(tier), str) and models.get(tier)
+        for tier in ("low", "mid", "high")
+    ):
+        return "models must be an object with low/mid/high model-id strings"
+    if not isinstance(cfg.get("port"), int):
+        return "port must be an integer"
+    if not isinstance(cfg.get("sentinel"), str) or not cfg["sentinel"]:
+        return "sentinel must be a non-empty string"
+    if not isinstance(cfg.get("rules"), dict) or not isinstance(
+        cfg.get("keywords"), dict
+    ):
+        return "rules/keywords must be objects"
+    return None
+
+
 def load_config(user_path: "Path | None" = None) -> dict:
     with open(DEFAULT_CONFIG_PATH, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
+        defaults = json.load(f)
+    cfg = defaults
     path = user_path if user_path is not None else user_config_path()
     try:
         with open(path, "r", encoding="utf-8") as f:
             user_cfg = json.load(f)
-        cfg = _deep_merge(cfg, user_cfg)
+        if not isinstance(user_cfg, dict):
+            raise ValueError("top-level config must be a JSON object")
+        merged = _deep_merge(defaults, user_cfg)
+        problem = _validate(merged)
+        if problem:
+            raise ValueError(problem)
+        cfg = merged
         cfg["_user_config_loaded"] = str(path)
     except FileNotFoundError:
         cfg["_user_config_loaded"] = None
-    except (json.JSONDecodeError, OSError) as exc:
-        # A broken user config must never take the proxy down.
+    except (ValueError, TypeError, OSError) as exc:
+        # A broken user config must never take the proxy down: fall back to
+        # the pristine defaults and surface the problem via health/doctor.
+        cfg = defaults
         cfg["_user_config_loaded"] = None
         cfg["_user_config_error"] = "%s: %s" % (path, exc)
     return cfg

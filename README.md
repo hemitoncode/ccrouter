@@ -70,8 +70,16 @@ bin/ccrouter doctor                        # environment / health checks
    `score ≤ −3 → LOW`, `≥ +4 → HIGH`, else MID.
 4. **Long-context floor:** huge conversations (> ~120k est. tokens) never
    drop below MID.
-5. **Fail-open:** any routing error → MID. If the upstream rejects a routed
-   model (400/404 naming the model), the request is retried once at MID.
+5. **Param fixups:** Claude Code shapes effort/thinking for the model *you*
+   selected — which behind the router is the sentinel. So after rewriting
+   the model, the proxy adapts those params to the target model's
+   capabilities (`model_params` in config): unsupported effort levels are
+   capped or dropped (e.g. `xhigh → high` on Sonnet/Opus 4.6), and thinking
+   plus its dependent `context_management` edits are stripped for Haiku.
+   Every fixup is visible in the decision log.
+6. **Fail-open:** any routing error → MID. If the upstream reports the
+   routed model isn't available (not-found/no-access), the request is
+   retried once at MID; unrelated errors surface untouched.
 
 Every knob — models, sentinel, port, keyword lists, weights, cutoffs — is
 config. Copy any subset of `config.default.json` into
@@ -95,8 +103,10 @@ latency.
 ## Privacy & safety
 
 - Binds `127.0.0.1` only.
-- Modifies only the `model` field of sentinel requests — system prompts,
-  messages, and headers are untouched (which also preserves prompt caching).
+- Rewrites the `model` field of sentinel requests and adapts model-specific
+  params (effort / thinking / dependent context-management edits) to the
+  routed model — your prompts, messages, and headers are never touched
+  (which also preserves prompt caching).
 - Decision log (`~/.cc-model-router/decisions.jsonl`) stores signals and
   scores, not prompt text (set `log.redact: false` to include an 80-char
   head). Credentials are never written anywhere.

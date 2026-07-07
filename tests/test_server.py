@@ -6,6 +6,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "src"))
 import http.client
 import json
 import os
+import socket
+import struct
 import tempfile
 import threading
 import unittest
@@ -32,6 +34,20 @@ class MockUpstream(BaseHTTPRequestHandler):
             "body": body,
         })
         mode = state.get("mode", "json")
+        if mode == "die_mid_body":
+            # Promise 1000 bytes, send a few, then RST the connection —
+            # simulates the upstream dying mid-SSE.
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Content-Length", "1000")
+            self.end_headers()
+            self.wfile.write(b"partial-data")
+            self.wfile.flush()
+            self.connection.setsockopt(
+                socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            self.connection.close()
+            self.close_connection = True
+            return
         if mode == "400_effort":
             error = json.dumps({
                 "type": "error",
@@ -260,6 +276,38 @@ class ProxyTest(unittest.TestCase):
         status, data = self.request(path="/", method="HEAD")
         self.assertEqual(status, 200)
         self.assertEqual(data, b"")
+
+    def test_mid_stream_upstream_death_aborts_cleanly(self):
+        """A mid-stream upstream failure must truncate the stream — never
+        write a second status line / 502 into the chunked body, never hang."""
+        self.mock.state["mode"] = "die_mid_body"
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request("POST", "/v1/messages",
+                     body=json.dumps(self.sentinel_body("hello there my friend")),
+                     headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        self.assertEqual(resp.status, 200)
+        try:
+            data = resp.read()  # would block forever on the old silent-hang bug
+        except (http.client.IncompleteRead, ConnectionError) as exc:
+            data = getattr(exc, "partial", b"") or b""
+        conn.close()
+        self.assertIn(b"partial-data", data)
+        self.assertNotIn(b"502", data)
+        self.assertNotIn(b"Bad Gateway", data)
+        self.assertNotIn(b"HTTP/1.1", data)
+
+    def test_header_lookup_is_case_insensitive(self):
+        status, _ = self.request(
+            body=self.sentinel_body(LOW_PROMPT),
+            headers={"X-Claude-Code-Agent-Id": "Agent-Cap-12345678",
+                     "X-Claude-Code-Session-Id": "Sess-Cap-87654321"},
+        )
+        self.assertEqual(status, 200)
+        last = (Path(self.tmp.name) / "decisions.jsonl").read_text().splitlines()[-1]
+        entry = json.loads(last)
+        self.assertEqual(entry["agent"], "12345678")
+        self.assertEqual(entry["sid"], "87654321")
 
     def test_dead_upstream_returns_502(self):
         cfg = dict(self.cfg)

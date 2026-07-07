@@ -92,7 +92,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
     # -- proxying ------------------------------------------------------------
     def _proxy(self):
         cfg = self.server.cfg
-        raw_body = self._read_body()
+        self._response_started = False
+        headers = {k.lower(): v for k, v in self.headers.items()}
+        try:
+            raw_body = self._read_body()
+        except ValueError:
+            return self._send_error_json(400, "malformed chunked request body")
 
         decision = None
         body_dict = None
@@ -103,7 +108,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 body_dict = None  # not JSON: forward untouched
         if isinstance(body_dict, dict):
             decision = router.decide(
-                self.path, dict(self.headers), body_dict, len(raw_body), cfg
+                self.path, headers, body_dict, len(raw_body), cfg
             )
         if decision is not None:
             body_dict["model"] = decision.model
@@ -112,7 +117,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
             raw_body = json.dumps(
                 body_dict, ensure_ascii=False, separators=(",", ":")
             ).encode("utf-8")
-            decisions.record(decision, dict(self.headers), self.path, cfg)
+            decisions.record(decision, headers, self.path, cfg)
 
         conn = None
         try:
@@ -141,17 +146,25 @@ class ProxyHandler(BaseHTTPRequestHandler):
                         signals=["from:%s" % decision.model]
                         + ["fixup:" + f for f in fixups],
                     )
-                    decisions.record(retry, dict(self.headers), self.path, cfg)
+                    decisions.record(retry, headers, self.path, cfg)
                     conn = self._upstream_request(raw_body)
                     resp = conn.getresponse()
                 else:
                     return self._send_buffered(resp.status, resp.getheaders(), err)
 
             self._stream_response(resp)
-        except (BrokenPipeError, ConnectionResetError):
-            pass  # client went away mid-stream
         except Exception as exc:
-            self._send_error_json(502, "upstream request failed: %s" % exc)
+            if self._response_started:
+                # Mid-stream failure: the chunked framing cannot be repaired
+                # and a 502 written here would land *inside* the body. Abort
+                # the connection so the client sees a clean truncation.
+                self.close_connection = True
+                self.log_message("aborted mid-stream: %s: %s",
+                                 type(exc).__name__, exc)
+            elif isinstance(exc, (BrokenPipeError, ConnectionResetError)):
+                self.close_connection = True  # client went away
+            else:
+                self._send_error_json(502, "upstream request failed: %s" % exc)
         finally:
             if conn is not None:
                 conn.close()
@@ -215,11 +228,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
             if length is not None:
                 self.send_header("Content-Length", length)
             self.end_headers()
+            self._response_started = True
             return
         # Chunked re-framing lets us flush each upstream chunk immediately,
         # which keeps SSE token streaming live in the terminal.
         self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
+        self._response_started = True
         while True:
             chunk = resp.read1(65536)
             if not chunk:
@@ -237,6 +252,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self.send_header(key, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
+        self._response_started = True
         if self.command != "HEAD":
             self.wfile.write(body)
 
