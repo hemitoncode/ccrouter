@@ -22,7 +22,7 @@ forwarded verbatim and never logged.
 Requires Node.js ≥ 18 and the `claude` CLI on your PATH.
 
 ```sh
-npm install -g ccrouter
+npm install -g @hemit99123/ccrouter
 ```
 
 That puts a global `ccrouter` command on your PATH. Then, instead of
@@ -42,7 +42,7 @@ and `ccrouter stop` shuts the proxy down.
 ### Install from source (or before publishing)
 
 ```sh
-git clone https://github.com/hemitpatel/ccrouter && cd ccrouter
+git clone https://github.com/hemitoncode/ccrouter && cd ccrouter
 npm link                 # registers the global `ccrouter` command from your checkout
 ```
 
@@ -137,7 +137,5 @@ State lives in `~/.cc-model-router/` (`config.json`, `decisions.jsonl`,
 
 ```sh
 npm pack --dry-run       # inspect exactly what will be published
-npm publish              # (npm login first; if the name "ccrouter" is taken,
-                         #  set a scoped name like "@yourname/ccrouter" in
-                         #  package.json — the command stays `ccrouter`)
+npm publish --access public   # scoped packages default to private otherwise
 ```

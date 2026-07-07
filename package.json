@@ -1,5 +1,5 @@
 {
-  "name": "ccrouter",
+  "name": "@hemit99123/ccrouter",
   "version": "0.1.0",
   "description": "Per-prompt model router for Claude Code — a zero-dependency localhost proxy that classifies each prompt and routes it to the best-suited Claude model (Haiku/Sonnet/Opus).",
   "keywords": [
@@ -34,6 +34,6 @@
   "dependencies": {},
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hemitpatel/ccrouter.git"
+    "url": "git+https://github.com/hemitoncode/ccrouter.git"
   }
 }
