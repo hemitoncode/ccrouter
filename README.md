@@ -1,6 +1,6 @@
-# 🔀 CC-Model-Router (CCMR)
+# 🔀 CC Router
 
-**cc-model-router** seamlessly integrates with Claude Code to automatically route your prompts to the optimal Anthropic model. Whether you need the lightning speed of Haiku for quick edits, the balanced power of Sonnet for standard development, or the deep reasoning of Opus for complex architecture, this router puts the right model at your fingertips.
+Hemit's Claude Code Router seamlessly integrates with Claude Code to automatically route your prompts to the optimal Anthropic model. Whether you need the lightning speed of Haiku for quick edits, the balanced power of Sonnet for standard development, or the deep reasoning of Opus for complex architecture, this router puts the right model at your fingertips.
 
 ---
 
